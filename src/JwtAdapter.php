@@ -68,31 +68,42 @@ class JwtAdapter extends Lcobucci implements JWT
 
         $claims = $token->getClaims();
 
-        if (!array_key_exists('iss', $claims)) {
-            // Test token signature against all available public keys + JWT secret
-            $atLeastOnePublicKeyWorked = false;
-
-            foreach ($this->getPublicKeys() as $publicKey) {
-                $signer = is_object($publicKey) ? new RS256() : new HS256();
-                if ($token->verify($signer, $publicKey)) {
-                    $atLeastOnePublicKeyWorked = true;
-                    break;
-                }
+        if (array_key_exists('iss', $claims)) {
+            if ($this->validateIss($token, $claims)) {
+                return array_map(
+                    function (Claim $claim) {
+                        return $claim->getValue();
+                    },
+                    $claims
+                );
             }
-
-            if (!$atLeastOnePublicKeyWorked) {
-                throw new TokenInvalidException('Token Signature could not be verified.');
-            }
-
-            // Convert to plain scalar values instead of an array of Claim objects
-            return array_map(
-                function (Claim $claim) {
-                    return $claim->getValue();
-                },
-                $claims
-            );
         }
 
+        // Test token signature against all available public keys + JWT secret
+        $atLeastOnePublicKeyWorked = false;
+
+        foreach ($this->getPublicKeys() as $publicKey) {
+            $signer = is_object($publicKey) ? new RS256() : new HS256();
+            if ($token->verify($signer, $publicKey)) {
+                $atLeastOnePublicKeyWorked = true;
+                break;
+            }
+        }
+
+        if (!$atLeastOnePublicKeyWorked) {
+            throw new TokenInvalidException('Token Signature could not be verified.');
+        }
+
+        // Convert to plain scalar values instead of an array of Claim objects
+        return array_map(
+            function (Claim $claim) {
+                return $claim->getValue();
+            },
+            $claims
+        );
+    }
+
+    private function validateIss($token, $claims) {
         $iss = trim($claims['iss']->getValue());
         $issuer = preg_replace('/[^A-Z0-9]+/', '_', strtoupper($iss));
 
@@ -100,28 +111,25 @@ class JwtAdapter extends Lcobucci implements JWT
             Log::warning('Env public key not found', [
                 'Iss' => $issuer
             ]);
-            throw new TokenInvalidException('Token Signature could not be verified.');
+
+            return false;
         }
 
         $signer = new RS256();
         $verifiedKey = $token->verify($signer, $publicKey);
-        if (!$verifiedKey) {
-            Log::warning('Token invalid with .env verify', [
+        if ($verifiedKey === true) {
+            Log::debug('Token successfully validated with .env', [
                 'Iss' => $issuer
             ]);
-            throw new TokenInvalidException('Token Signature could not be verified.');
+
+            return true;
         }
 
-        Log::debug('Token successfully validated with .env', [
+        Log::warning('Token invalid with .env verify', [
             'Iss' => $issuer
         ]);
 
-        return array_map(
-            function (Claim $claim) {
-                return $claim->getValue();
-            },
-            $claims
-        );
+        return false;
     }
 
     /**
