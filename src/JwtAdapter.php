@@ -179,7 +179,7 @@ class JwtAdapter extends Lcobucci implements JWT
     {
         $env = getenv('JWT_PUBLIC_KEY_' . $iss);
 
-        return str_replace('\\n', PHP_EOL, $env);
+        return base64_decode($env);
     }
 
     private function globKeys($pattern)
