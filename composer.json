@@ -24,7 +24,7 @@
     "require": {
         "php": ">=7.0",
         "laravel/framework": ">=5.0",
-        "tymon/jwt-auth": "1.0.0"
+        "tymon/jwt-auth": "^1.0"
     },
     "require-dev": {
         "mockery/mockery": "0.9.*",
