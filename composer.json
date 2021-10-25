@@ -24,7 +24,7 @@
     "require": {
         "php": ">=7.0",
         "laravel/framework": ">=5.0",
-        "dees040/jwt-auth": "^1"
+        "php-open-source-saver/jwt-auth": "^1.1"
     },
     "require-dev": {
         "mockery/mockery": "0.9.*",
