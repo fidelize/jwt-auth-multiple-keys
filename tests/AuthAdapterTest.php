@@ -3,14 +3,13 @@
 namespace Fidelize\JWTAuth\Test;
 
 use Fidelize\JWTAuth\AuthAdapter;
-use App\Models\User;
 use Illuminate\Auth\AuthManager;
 use Illuminate\Support\Facades\Config;
 use Mockery;
 
 class AuthAdapterTest extends AbstractTestCase
 {
-    protected function setUp()
+    protected function setUp(): void
     {
         parent::setUp();
 

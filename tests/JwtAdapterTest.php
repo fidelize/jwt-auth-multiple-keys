@@ -5,18 +5,34 @@ namespace Fidelize\JWTAuth\Test;
 use Fidelize\JWTAuth\JwtAdapter;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\File;
-use Tymon\JWTAuth\Exceptions\TokenInvalidException;
-use Tymon\JWTAuth\Exceptions\JWTException;
-use Lcobucci\JWT\Parser;
-use Lcobucci\JWT\Builder;
+use PHPOpenSourceSaver\JWTAuth\Exceptions\TokenInvalidException;
+use PHPOpenSourceSaver\JWTAuth\Exceptions\JWTException;
+use Lcobucci\JWT\Configuration;
+use Lcobucci\JWT\Signer\Key\InMemory;
+use Lcobucci\JWT\Signer\Rsa\Sha256 as RS256;
 
 class JwtAdapterTest extends AbstractTestCase
 {
-    protected function setUp()
+    protected function setUp(): void
     {
         parent::setUp();
         Config::shouldReceive('get')->with('jwt.keys_directory')->andReturn(__DIR__ . '/keys');
-        $_ENV['JWT_PUBLIC_KEY_FOO'] = '-----BEGIN PUBLIC KEY-----\\nMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAuOVk35U8Q+xkFSvp9CcI\\ndzAnbnd/rX1HlXYcr0ihLuh0TzlhJBLCg9rOafxUDaRuPvwDB0MN+c+lIBjEDXYu\\nzh9LDlrd7vg6fMXeDArLBUyJn3hVU49mthu2Wv4KfAcNzrUTQeWLMxXnHRuyyTw8\\nJcvqkC9K2hfECgAIXmIWjJ/1J84iLFgT/upk5o7QX9kNAu0+9iUQ6FuyMPdEnUFS\\n83UpUoE8u1pulHizWeVKiUKUTlp521dO16vmL06WI0oHdLRqojUumnDRraaFKPgq\\nFowVCddlKdGLDAMAHOqPl+s1cvcYon3KhE5f+2preyrFEp/MLZKINRdNmnJff3QM\\nYf1gaQqNl2PUK89e0HxGXHSZLvIGZIxowGCBmH/2N5i1nrutQ3S3cZ7A/Autb4nh\\npapWRw6xFRueaaV5oAEZ/5Vyv9dH6ALBk+p8sp1ldr0yjia7SMc8rEatrh85jAVI\\nwSyevn8CyL67qny3M/Yv8xeE1owYqeVCEVW/a65b++Lwj7sTuhrBGG8rrIaT/v5P\\np9vGs2EkOaLwi3Jz2oG52uZs+8J3AK67fipKzrXe9Bleh9USIP7ouQPZpg//1MQD\\nL3HrYctZIrCukKKDZxaOALHGU6KlQ4jMMXMZzBvfCrv32whl9SHvXBxtGREcRX85\\nBDVsWAUdKuI5vZtAF+B95oECAwEAAQ==\\n-----END PUBLIC KEY-----\\n';
+        $key = '-----BEGIN PUBLIC KEY-----
+MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAuOVk35U8Q+xkFSvp9CcI
+dzAnbnd/rX1HlXYcr0ihLuh0TzlhJBLCg9rOafxUDaRuPvwDB0MN+c+lIBjEDXYu
+zh9LDlrd7vg6fMXeDArLBUyJn3hVU49mthu2Wv4KfAcNzrUTQeWLMxXnHRuyyTw8
+JcvqkC9K2hfECgAIXmIWjJ/1J84iLFgT/upk5o7QX9kNAu0+9iUQ6FuyMPdEnUFS
+83UpUoE8u1pulHizWeVKiUKUTlp521dO16vmL06WI0oHdLRqojUumnDRraaFKPgq
+FowVCddlKdGLDAMAHOqPl+s1cvcYon3KhE5f+2preyrFEp/MLZKINRdNmnJff3QM
+Yf1gaQqNl2PUK89e0HxGXHSZLvIGZIxowGCBmH/2N5i1nrutQ3S3cZ7A/Autb4nh
+papWRw6xFRueaaV5oAEZ/5Vyv9dH6ALBk+p8sp1ldr0yjia7SMc8rEatrh85jAVI
+wSyevn8CyL67qny3M/Yv8xeE1owYqeVCEVW/a65b++Lwj7sTuhrBGG8rrIaT/v5P
+p9vGs2EkOaLwi3Jz2oG52uZs+8J3AK67fipKzrXe9Bleh9USIP7ouQPZpg//1MQD
+L3HrYctZIrCukKKDZxaOALHGU6KlQ4jMMXMZzBvfCrv32whl9SHvXBxtGREcRX85
+BDVsWAUdKuI5vZtAF+B95oECAwEAAQ==
+-----END PUBLIC KEY-----
+';
+        putenv('JWT_PUBLIC_KEY_FOO='.base64_encode($key));
     }
 
     public function testEncodeWhenThereIsNoPrivateKey()
@@ -123,12 +139,7 @@ class JwtAdapterTest extends AbstractTestCase
 
     private function getJwtAdapter($secret = 'secret')
     {
-        return new JwtAdapter(
-            new Builder(),
-            new Parser(),
-            $secret,
-            'RS256',
-            []
-        );
+        $config = Configuration::forSymmetricSigner(new RS256(), InMemory::plainText($secret));
+        return new JwtAdapter($config);
     }
 }
