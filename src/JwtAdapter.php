@@ -20,9 +20,13 @@ use PHPOpenSourceSaver\JWTAuth\Contracts\Providers\JWT;
 
 class JwtAdapter extends Lcobucci implements JWT
 {   
-    public function __construct(Configuration $config)
+    public function __construct()
     {
-        $this->config = $config;
+        return parent::__construct(
+            Config::get('jwt.secret'),
+            Config::get('jwt.algo'),
+            []
+        );
     }
 
     /**
@@ -38,6 +42,9 @@ class JwtAdapter extends Lcobucci implements JWT
 
         try {
             foreach ($payload as $key => $value) {
+                if ($value === null) {
+                    continue;
+                }
                 $this->addClaim($key, $value);
             }
             $key = $this->getPrivateKey();
