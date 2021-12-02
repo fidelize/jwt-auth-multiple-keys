@@ -2,12 +2,9 @@
 namespace Fidelize\JWTAuth;
 
 use Exception;
-use Log;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log as FacadesLog;
-use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Rsa\Sha256 as RS256;
 use Lcobucci\JWT\Signer\Hmac\Sha256 as HS256;
 use Lcobucci\JWT\Signer\Key\InMemory;
@@ -16,7 +13,6 @@ use PHPOpenSourceSaver\JWTAuth\Exceptions\JWTException;
 use PHPOpenSourceSaver\JWTAuth\Exceptions\TokenInvalidException;
 use PHPOpenSourceSaver\JWTAuth\Providers\JWT\Lcobucci;
 use PHPOpenSourceSaver\JWTAuth\Contracts\Providers\JWT;
-
 
 class JwtAdapter extends Lcobucci implements JWT
 {   
@@ -42,9 +38,6 @@ class JwtAdapter extends Lcobucci implements JWT
 
         try {
             foreach ($payload as $key => $value) {
-                if ($value === null) {
-                    continue;
-                }
                 $this->addClaim($key, $value);
             }
             $key = $this->getPrivateKey();
