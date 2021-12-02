@@ -2,27 +2,23 @@
 namespace Fidelize\JWTAuth;
 
 use Exception;
-use Log;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\File;
-use Lcobucci\JWT\Builder;
-use Lcobucci\JWT\Claim;
-use Lcobucci\JWT\Parser;
+use Illuminate\Support\Collection;
 use Lcobucci\JWT\Signer\Rsa\Sha256 as RS256;
 use Lcobucci\JWT\Signer\Hmac\Sha256 as HS256;
-use Lcobucci\JWT\Signer\Keychain;
-use Tymon\JWTAuth\Exceptions\JWTException;
-use Tymon\JWTAuth\Exceptions\TokenInvalidException;
-use Tymon\JWTAuth\Providers\JWT\Lcobucci;
-use Tymon\JWTAuth\Contracts\Providers\JWT;
+use Lcobucci\JWT\Signer\Key\InMemory;
+use Lcobucci\JWT\Validation\Constraint\SignedWith;
+use PHPOpenSourceSaver\JWTAuth\Exceptions\JWTException;
+use PHPOpenSourceSaver\JWTAuth\Exceptions\TokenInvalidException;
+use PHPOpenSourceSaver\JWTAuth\Providers\JWT\Lcobucci;
+use PHPOpenSourceSaver\JWTAuth\Contracts\Providers\JWT;
 
 class JwtAdapter extends Lcobucci implements JWT
-{
+{   
     public function __construct()
     {
         return parent::__construct(
-            new Builder(),
-            new Parser(),
             Config::get('jwt.secret'),
             Config::get('jwt.algo'),
             []
@@ -37,15 +33,23 @@ class JwtAdapter extends Lcobucci implements JWT
      */
     public function encode(array $payload)
     {
+        $this->builder = null;
+        $this->builder = $this->config->builder();
+
         try {
             foreach ($payload as $key => $value) {
-                $this->builder->set($key, $value);
+                $this->addClaim($key, $value);
             }
             $key = $this->getPrivateKey();
-            $signer = is_object($key) ? new RS256() : new HS256();
-            $this->builder->sign($signer, $key);
-            $token = $this->builder->getToken();
-            return $token->__toString();
+            $signer = new RS256();
+
+            if (!is_object($key)) {
+                $signer = new HS256();
+                $key = InMemory::plainText($key);
+            }
+            
+            $token = $this->builder->getToken($signer, $key);
+            return $token->toString();
         } catch (Exception $e) {
             throw new JWTException('Could not create token: ' . $e->getMessage());
         }
@@ -61,21 +65,16 @@ class JwtAdapter extends Lcobucci implements JWT
     public function decode($token)
     {
         try {
-            $token = $this->parser->parse((string) $token);
+            $jwt = $this->config->parser()->parse($token);
         } catch (Exception $e) {
             throw new TokenInvalidException('Could not decode token: ' . $e->getMessage());
         }
 
-        $claims = $token->getClaims();
+        $claims = $jwt->claims()->all();
 
         if (array_key_exists('iss', $claims)) {
-            if ($this->validateIss($token, $claims)) {
-                return array_map(
-                    function (Claim $claim) {
-                        return $claim->getValue();
-                    },
-                    $claims
-                );
+            if ($this->validateIss($jwt, $claims)) {
+                return $this->getClaims($claims);
             }
         }
 
@@ -83,11 +82,19 @@ class JwtAdapter extends Lcobucci implements JWT
         $atLeastOnePublicKeyWorked = false;
 
         foreach ($this->getPublicKeys() as $publicKey) {
-            $signer = is_object($publicKey) ? new RS256() : new HS256();
-            if ($token->verify($signer, $publicKey)) {
+            $signer = new RS256();
+
+            if (!is_object($publicKey)) {
+                $signer = new HS256();
+                $publicKey = InMemory::plainText($publicKey);
+            }
+
+            $this->config->setValidationConstraints(new SignedWith($signer, $publicKey));
+            if ($this->config->validator()->validate($jwt, ...$this->config->validationConstraints())) {
                 $atLeastOnePublicKeyWorked = true;
                 break;
             }
+                
         }
 
         if (!$atLeastOnePublicKeyWorked) {
@@ -95,39 +102,21 @@ class JwtAdapter extends Lcobucci implements JWT
         }
 
         // Convert to plain scalar values instead of an array of Claim objects
-        return array_map(
-            function (Claim $claim) {
-                return $claim->getValue();
-            },
-            $claims
-        );
+        return $this->getClaims($claims);
     }
 
-    private function validateIss($token, $claims) {
-        $iss = trim($claims['iss']->getValue());
+    private function validateIss($jwt, $claims) {
+        $iss = trim($this->getClaimValue($claims['iss']));
         $issuer = preg_replace('/[^A-Z0-9]+/', '_', strtoupper($iss));
 
         if (!$publicKey = $this->getPublicKeysFromEnv($issuer)) {
-            Log::warning('Env public key not found', [
-                'Iss' => $issuer
-            ]);
-
             return false;
         }
 
-        $signer = new RS256();
-        $verifiedKey = $token->verify($signer, $publicKey);
-        if ($verifiedKey === true) {
-            Log::debug('Token successfully validated with .env', [
-                'Iss' => $issuer
-            ]);
-
+        $this->config->setValidationConstraints(new SignedWith(new RS256(), InMemory::plainText($publicKey)));
+        if ($this->config->validator()->validate($jwt, ...$this->config->validationConstraints())) {
             return true;
         }
-
-        Log::warning('Token invalid with .env verify', [
-            'Iss' => $issuer
-        ]);
 
         return false;
     }
@@ -146,12 +135,11 @@ class JwtAdapter extends Lcobucci implements JWT
 
         // If there is no private key, fallback to JWT_SECRET
         if (count($files) == 0) {
-            return $this->secret;
+            return $this->config->signingKey()->contents();
         }
 
         $file = array_pop($files);
-        $keychain = new Keychain();
-        return $keychain->getPrivateKey("file://{$file}");
+        return InMemory::file($file);
     }
 
     /**
@@ -159,18 +147,17 @@ class JwtAdapter extends Lcobucci implements JWT
      * Note that though you can trust and use the token, you are not able
      * to generate tokens using PUBLIC keys, only PRIVATE ones.
      */
-    private function getPublicKeys()
+    private function getPublicKeys(): array
     {
         $files = $this->globKeys('jwt.*.key.pub');
-        $keychain = new Keychain();
         $keys = [];
 
         foreach ($files as $file) {
-            $keys[] = $keychain->getPublicKey("file://{$file}");
+            $keys[] = InMemory::file($file);
         }
 
         // If there is no public key, fallback to JWT_SECRET
-        $keys[] = $this->secret;
+        $keys[] = $this->config->signingKey()->contents();
 
         return $keys;
     }
@@ -178,7 +165,6 @@ class JwtAdapter extends Lcobucci implements JWT
     private function getPublicKeysFromEnv($iss)
     {
         $env = getenv('JWT_PUBLIC_KEY_' . $iss);
-
         return base64_decode($env);
     }
 
@@ -190,5 +176,24 @@ class JwtAdapter extends Lcobucci implements JWT
     private function getKeysDirectory()
     {
         return Config::get('jwt.keys_directory') . DIRECTORY_SEPARATOR;
+    }
+
+    private function getClaims($claims): array
+    {
+        return (new Collection($claims))->map(function ($claim) {
+            return $this->getClaimValue($claim);
+        })->toArray();
+    }
+
+    private function getClaimValue($claim)
+    {
+        if (is_a($claim, \DateTimeImmutable::class)) {
+            return $claim->getTimestamp();
+        }
+        if (is_object($claim) && method_exists($claim, 'getValue')) {
+            return $claim->getValue();
+        }
+
+        return $claim;
     }
 }

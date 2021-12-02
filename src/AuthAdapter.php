@@ -3,8 +3,8 @@ namespace Fidelize\JWTAuth;
 
 use Illuminate\Contracts\Auth\Factory;
 use Illuminate\Support\Facades\Config;
-use Tymon\JWTAuth\Providers\Auth\Illuminate;
-use Tymon\JWTAuth\Contracts\Providers\Auth;
+use PHPOpenSourceSaver\JWTAuth\Providers\Auth\Illuminate;
+use PHPOpenSourceSaver\JWTAuth\Contracts\Providers\Auth;
 
 class AuthAdapter implements Auth
 {
